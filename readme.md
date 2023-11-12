@@ -1,0 +1,1 @@
+- update weatherstack.access_key in application.properties before running the application
