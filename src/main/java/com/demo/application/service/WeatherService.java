@@ -1,8 +1,10 @@
 package com.demo.application.service;
 
+import com.demo.application.dto.OpenweathermapResponse;
 import com.demo.application.dto.WeatherResponse;
+import com.demo.application.dto.WeatherstackResponse;
+import com.demo.application.util.Common;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
@@ -10,15 +12,17 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
-import java.util.Map;
 import java.util.Optional;
 
 @Service
 @Slf4j
 public class WeatherService {
 
-    @Autowired
     RestTemplate restTemplate;
+
+    public WeatherService(RestTemplate restTemplate) {
+        this.restTemplate = restTemplate;
+    }
 
     @Value("${weatherstack.url}")
     String weatherstackUrl;
@@ -29,8 +33,8 @@ public class WeatherService {
     @Value("${openweathermap.url}")
     String openweathermapUrl;
 
-    @Value("${openweathermap.api_id}")
-    String openweathermapApiId;
+    @Value("${openweathermap.access_key}")
+    String openweathermapAccessKey;
 
     @Cacheable(value="weather")
     public WeatherResponse getWeather(String city) {
@@ -38,40 +42,32 @@ public class WeatherService {
     }
 
     @CacheEvict(value = "weather", allEntries = true)
-    @Scheduled(fixedDelay = 3 * 1000)
+    @Scheduled(fixedDelay = 60 * 1000)
     public void weatherCacheEvict() {
     }
 
     WeatherResponse getWeatherFromWeatherstack(String city) {
         try {
-            log.info("trying to get weather from weatherstack");
-            WeatherResponse response = new WeatherResponse();
-            Map<String, Object> apiResult = restTemplate.getForObject(weatherstackUrl, Map.class, city, weatherstackAccessKey);
-            Integer temperatureDegrees = (Integer) ((Map<String, Object>) apiResult.get("current")).get("temperature");
-            Integer windSpeed = (Integer) ((Map<String, Object>) apiResult.get("current")).get("wind_speed");
-            response.setTemperatureDegrees(temperatureDegrees);
-            response.setWindSpeed(windSpeed);
-            return response;
+            log.info("trying to get weather from weatherstack for city {}", city);
+            WeatherstackResponse apiResult = restTemplate.getForObject(weatherstackUrl, WeatherstackResponse.class, city, weatherstackAccessKey);
+            return WeatherResponse.builder()
+                    .temperatureDegrees(apiResult.getCurrent().getTemperature())
+                    .windSpeed(apiResult.getCurrent().getWindSpeed()).build();
         } catch (Exception e) {
-            log.error("error when getting weather from weatherstack");
-            e.printStackTrace();
+            log.error("error when getting weather from weatherstack", e);
             return null;
         }
     }
 
     WeatherResponse getWeatherFromOpenweathermap(String city) {
         try {
-            log.info("trying to get weather from openweathermap");
-            WeatherResponse response = new WeatherResponse();
-            Map<String, Object> apiResult = restTemplate.getForObject(openweathermapUrl, Map.class, city, openweathermapApiId);
-            Integer temperatureDegrees = ((Long) Math.round((Double) ((Map<String, Object>) apiResult.get("main")).get("temp"))).intValue();
-            Integer windSpeed = ((Long) Math.round((Double) ((Map<String, Object>) apiResult.get("wind")).get("speed"))).intValue();
-            response.setTemperatureDegrees(temperatureDegrees);
-            response.setWindSpeed(windSpeed);
-            return response;
+            log.info("trying to get weather from openweathermap for city {}", city);
+            OpenweathermapResponse apiResult = restTemplate.getForObject(openweathermapUrl, OpenweathermapResponse.class, city, openweathermapAccessKey);
+            return WeatherResponse.builder()
+                    .temperatureDegrees(Common.doubleToInteger(apiResult.getMain().getTemp()))
+                    .windSpeed(Common.doubleToInteger(apiResult.getWind().getSpeed())).build();
         } catch (Exception e) {
-            log.error("error when getting weather from openweathermap");
-            e.printStackTrace();
+            log.error("error when getting weather from openweathermap", e);
             return null;
         }
     }
